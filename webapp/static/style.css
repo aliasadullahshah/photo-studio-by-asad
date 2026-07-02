@@ -364,6 +364,9 @@ body {
 
 #canvas {
   display: block;
+  /* Without this, touch screens turn suit-drag pointer events into page
+     scrolling (pointercancel) — preventDefault alone cannot opt out. */
+  touch-action: none;
   height: calc(100vh - 265px);
   min-height: 340px;
   aspect-ratio: 35 / 45;

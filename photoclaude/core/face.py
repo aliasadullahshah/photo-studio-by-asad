@@ -49,15 +49,17 @@ def _get_cascade():
 
 def detect_face(img: Image.Image) -> FaceBox | None:
     gray = cv2.cvtColor(np.asarray(img.convert("RGB")), cv2.COLOR_RGB2GRAY)
-    gray = cv2.equalizeHist(gray)
     min_side = max(60, int(min(img.size) * 0.1))
-    faces = _get_cascade().detectMultiScale(
-        gray, scaleFactor=1.08, minNeighbors=6, minSize=(min_side, min_side)
-    )
-    if len(faces) == 0:
-        return None
-    x, y, w, h = max(faces, key=lambda f: f[2] * f[3])  # largest face
-    return FaceBox(int(x), int(y), int(w), int(h))
+    # Raw grayscale first: equalizeHist wrecks detection on bright studio
+    # shots, but rescues genuinely low-contrast photos — so it is the fallback.
+    for g in (gray, cv2.equalizeHist(gray)):
+        faces = _get_cascade().detectMultiScale(
+            g, scaleFactor=1.08, minNeighbors=6, minSize=(min_side, min_side)
+        )
+        if len(faces):
+            x, y, w, h = max(faces, key=lambda f: f[2] * f[3])  # largest face
+            return FaceBox(int(x), int(y), int(w), int(h))
+    return None
 
 
 def passport_crop_box(img: Image.Image, face: FaceBox) -> tuple[int, int, int, int]:

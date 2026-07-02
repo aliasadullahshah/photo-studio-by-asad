@@ -5,10 +5,13 @@ offline afterwards. Everything runs on-device via onnxruntime CPU.
 """
 from __future__ import annotations
 
+import threading
+
 import numpy as np
 from PIL import Image, ImageFilter
 
 _session = None
+_session_lock = threading.Lock()
 
 MODEL_NAME = "u2net_human_seg"
 
@@ -16,9 +19,14 @@ MODEL_NAME = "u2net_human_seg"
 def get_session():
     global _session
     if _session is None:
-        from rembg import new_session
+        # Double-checked lock: the web server handles requests on a thread
+        # pool, and two concurrent first requests must not both build the
+        # ~176 MB ONNX session (or race the one-time model download).
+        with _session_lock:
+            if _session is None:
+                from rembg import new_session
 
-        _session = new_session(MODEL_NAME)
+                _session = new_session(MODEL_NAME)
     return _session
 
 

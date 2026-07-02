@@ -10,6 +10,9 @@ For each input photo:
 Usage:
   python tools/make_real_suits.py assets_raw\photo1.jpg [more...]
   python tools/make_real_suits.py assets_raw            (whole folder)
+  python tools/make_real_suits.py --offset 0.3 photo.jpg
+      (--offset lowers the cut by a fraction of the face height — use when a
+       beard or jaw shadow survives the default chin-line cut)
 
 Output: assets/suits/real_<stem>.png
 """
@@ -31,7 +34,7 @@ CANVAS_RATIO = 900 / 1200  # height / width, matches drawn templates
 FEATHER_PX_FRac = 0.012    # feather at the chin cut, relative to canvas width
 
 
-def make_template(src: Path) -> Path | None:
+def make_template(src: Path, offset: float = 0.0) -> Path | None:
     img = imageio.load_image(src)
     face = face_mod.detect_face(img)
     if face is None:
@@ -41,11 +44,16 @@ def make_template(src: Path) -> Path | None:
     cutout = background.remove_background(img)
     a = np.asarray(cutout.getchannel("A"), dtype=np.float32)
 
-    # Feathered horizontal cut just above the chin: kill head and neck.
+    # Feathered cut just above the chin: kill head and neck. The optional
+    # offset deepens the cut only near the face center (Gaussian falloff) so
+    # a beard can be removed without slicing a straight line into the
+    # shoulders at the sides.
     cut_y = face.chin_y
     feather = max(4.0, img.width * FEATHER_PX_FRac)
     yy = np.arange(cutout.height, dtype=np.float32)[:, None]
-    ramp = np.clip((yy - cut_y) / feather, 0.0, 1.0)  # 0 above chin -> 1 below
+    xx = np.arange(cutout.width, dtype=np.float32)[None, :]
+    bump = offset * face.h * np.exp(-(((xx - face.cx) / (0.8 * face.w)) ** 2))
+    ramp = np.clip((yy - (cut_y + bump)) / feather, 0.0, 1.0)  # 0 above -> 1 below
     a *= ramp
     cutout.putalpha(Image.fromarray(a.astype(np.uint8)))
 
@@ -74,6 +82,11 @@ def make_template(src: Path) -> Path | None:
 
 
 def main(argv: list[str]) -> int:
+    offset = 0.0
+    if "--offset" in argv:
+        i = argv.index("--offset")
+        offset = float(argv[i + 1])
+        argv = argv[:i] + argv[i + 2 :]
     if not argv:
         print(__doc__)
         return 2
@@ -86,7 +99,7 @@ def main(argv: list[str]) -> int:
         elif p.is_file():
             files.append(p)
     OUT_DIR.mkdir(parents=True, exist_ok=True)
-    made = [make_template(f) for f in files]
+    made = [make_template(f, offset=offset) for f in files]
     ok = [m for m in made if m]
     print(f"{len(ok)}/{len(files)} templates created")
     return 0 if ok else 1

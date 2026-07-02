@@ -49,7 +49,12 @@ passport crop (35:45), AI background removal.
 ```
 { "cutout": "<base64 PNG, RGBA, transparent bg>",
   "width": int, "height": int,
-  "face": {"x":int,"y":int,"w":int,"h":int,"cx":float,"chin_y":float} | null }
+  "face": {"x":int,"y":int,"w":int,"h":int,"cx":float,"chin_y":float} }
+```
+`face` is never null: when detection fails the server synthesizes the desktop
+fallback box (fw = 0.34*W; x=(W-fw)/2, y=0.18*H, h=1.25*fw) so clients need no
+fallback logic of their own.
+```
 ```
 400 JSON {"detail": "..."} on unreadable file.
 
