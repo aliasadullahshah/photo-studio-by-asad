@@ -1,0 +1,13 @@
+.git
+build
+dist
+installer_output
+assets_raw
+smoke_out
+__pycache__
+**/__pycache__
+*.pyc
+.claude
+.agents
+docs
+tools

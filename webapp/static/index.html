@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Photo Studio by Asad</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='20' fill='%230ea5e9'/%3E%3Ccircle cx='50' cy='44' r='16' fill='%230b1120'/%3E%3Crect x='24' y='64' width='52' height='22' rx='11' fill='%230b1120'/%3E%3C/svg%3E" />
+  <link rel="stylesheet" href="/static/style.css" />
+</head>
+<body>
+
+  <header class="app-header">
+    <div class="brand">
+      <span class="brand-dot" aria-hidden="true"></span>
+      <span class="brand-name">Photo Studio <em>by Asad</em></span>
+    </div>
+    <div class="brand-tag">Passport photos, done locally</div>
+  </header>
+
+  <main class="app-main">
+
+    <!-- ============ Landing state ============ -->
+    <section id="landing" class="landing">
+      <h1 class="landing-title">Photo Studio by Asad</h1>
+      <p class="landing-subtitle">
+        Turn any portrait into a compliant 35&thinsp;&times;&thinsp;45&nbsp;mm passport photo —
+        background removed with local AI, no uploads to the cloud.
+      </p>
+
+      <div id="dropzone" class="dropzone" tabindex="0" role="button"
+           aria-label="Drag and drop your photo here, or press Enter to browse">
+        <svg class="dropzone-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+             stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M12 16V4m0 0 4 4m-4-4-4 4" />
+          <path d="M4 15v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3" />
+        </svg>
+        <div class="dropzone-text">Drag &amp; drop your photo here</div>
+        <div class="dropzone-sub">or click to browse</div>
+      </div>
+
+      <div class="landing-actions">
+        <button id="btn-sample" class="btn btn-secondary" type="button">Try a sample photo</button>
+      </div>
+
+      <p class="formats-hint">Supports JPG, PNG, HEIC, TIFF, WEBP and BMP</p>
+
+      <div id="landing-error" class="inline-error" role="alert" hidden></div>
+
+      <input id="file-input" type="file" hidden
+             accept=".jpg,.jpeg,.png,.heic,.heif,.tif,.tiff,.webp,.bmp,image/*" />
+    </section>
+
+    <!-- ============ Editor state ============ -->
+    <section id="editor" class="editor" hidden>
+
+      <aside class="panel panel-left" aria-label="Background options">
+        <h3 class="panel-title">Background</h3>
+        <div id="swatches" class="swatch-grid"></div>
+        <div class="custom-row">
+          <label class="custom-color-label" for="custom-color">
+            <input type="color" id="custom-color" value="#9bbbdd" />
+            <span>Custom colour</span>
+          </label>
+        </div>
+        <button id="btn-transparent" class="btn btn-secondary btn-block" type="button">
+          <span class="checker-chip" aria-hidden="true"></span> Keep transparent
+        </button>
+      </aside>
+
+      <div class="stage">
+        <div class="canvas-wrap">
+          <canvas id="canvas" width="700" height="900"></canvas>
+        </div>
+        <p class="stage-hint" id="stage-hint">
+          Tip: drag the suit on the photo to reposition &middot; scroll over the photo to resize it
+        </p>
+      </div>
+
+      <aside class="panel panel-right" aria-label="Suit and adjustments">
+        <h3 class="panel-title">Suit</h3>
+        <div id="suit-gallery" class="suit-gallery">
+          <div class="panel-note" id="suit-loading">Loading suits&hellip;</div>
+        </div>
+
+        <h3 class="panel-title">Adjust</h3>
+        <div class="slider-row">
+          <div class="slider-label"><span>Size</span><span class="slider-value" id="val-size">100%</span></div>
+          <input type="range" id="slider-size" min="70" max="140" step="1" value="100" />
+        </div>
+        <div class="slider-row">
+          <div class="slider-label"><span>Horizontal</span><span class="slider-value" id="val-dx">0</span></div>
+          <input type="range" id="slider-dx" min="-20" max="20" step="0.5" value="0" />
+        </div>
+        <div class="slider-row">
+          <div class="slider-label"><span>Vertical</span><span class="slider-value" id="val-dy">0</span></div>
+          <input type="range" id="slider-dy" min="-20" max="20" step="0.5" value="0" />
+        </div>
+        <button id="btn-reset" class="btn btn-secondary btn-block" type="button">Reset adjustments</button>
+      </aside>
+
+      <div class="bottombar">
+        <div class="bar-group">
+          <label class="bar-field">
+            <span>Paper</span>
+            <select id="paper-select"></select>
+          </label>
+          <label class="bar-field">
+            <span>Copies</span>
+            <select id="copies-select"></select>
+          </label>
+          <span id="bar-status" class="bar-status" role="status"></span>
+        </div>
+        <div class="bar-group bar-actions">
+          <button id="btn-download-photo" class="btn btn-primary" type="button">Download Photo (PNG)</button>
+          <button id="btn-sheet-pdf" class="btn btn-secondary" type="button">Download Sheet (PDF)</button>
+          <button id="btn-sheet-png" class="btn btn-secondary" type="button">Download Sheet (PNG)</button>
+          <button id="btn-start-over" class="btn btn-ghost" type="button">Start Over</button>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- ============ Processing overlay ============ -->
+  <div id="processing" class="processing-overlay" hidden>
+    <div class="processing-card">
+      <div class="spinner" aria-hidden="true"></div>
+      <div class="processing-text">Removing background with local AI&hellip;</div>
+      <div class="processing-sub">This usually takes a few seconds</div>
+    </div>
+  </div>
+
+  <footer class="app-footer">&copy; 2026 Ali Asad. All rights reserved.</footer>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>

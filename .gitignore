@@ -4,5 +4,6 @@ build/
 dist/
 installer_output/
 smoke_out/
+assets_raw/
 .claude/
 .agents/

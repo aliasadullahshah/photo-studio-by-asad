@@ -22,7 +22,20 @@ A Windows desktop app for making print-ready passport photos, fully offline
    print directly. 8 copies on 4×6" use the lab-style rotated layout. Always
    print at **100% scale / actual size**.
 
-## Run from source
+## Web edition
+
+The same pipeline is also available as a web app — drag & drop a photo in the
+browser, pick a background and suit, download print sheets:
+
+```bat
+run_web.bat            :: then open http://127.0.0.1:8317
+```
+
+See [HOSTING.md](HOSTING.md) for LAN sharing and internet hosting (Docker
+image included). Real-photo suit templates can be produced from any
+permissively-licensed portrait with `python tools\make_real_suits.py <photos>`.
+
+## Run from source (desktop app)
 
 ```bat
 pip install -r requirements.txt
