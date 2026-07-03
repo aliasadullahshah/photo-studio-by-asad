@@ -14,7 +14,9 @@ from PySide6.QtWidgets import (
 )
 
 from photoclaude import APP_NAME, COPYRIGHT
-from photoclaude.core import background, face as face_mod, imageio, sheet as sheet_mod, suit as suit_mod
+from photoclaude.core import (
+    background, enhance as enhance_mod, face as face_mod, imageio,
+    sheet as sheet_mod, suit as suit_mod)
 
 BG_PRESETS = [
     ("White", (255, 255, 255)),
@@ -119,8 +121,20 @@ class MainWindow(QMainWindow):
         bg_lay.addWidget(self.bg_combo)
         col.addWidget(bg_box)
 
+        # enhance group
+        enh_box = QGroupBox("3. Enhance (optional)")
+        enh_lay = QVBoxLayout(enh_box)
+        self.btn_fix_light = self._toggle(enh_lay, "Fix Lighting",
+                                          "Auto contrast and exposure correction")
+        self.btn_smooth_skin = self._toggle(
+            enh_lay, "Smooth Skin",
+            "Reduce scars, spots and discoloration on the face")
+        self.btn_brighten = self._toggle(enh_lay, "Brighten Face",
+                                         "Gently lift the face brightness")
+        col.addWidget(enh_box)
+
         # suit group
-        suit_box = QGroupBox("3. Suit / Blazer")
+        suit_box = QGroupBox("4. Suit / Blazer")
         suit_lay = QVBoxLayout(suit_box)
         self.suit_combo = QComboBox()
         self.suit_combo.currentIndexChanged.connect(self.recompose)
@@ -142,7 +156,7 @@ class MainWindow(QMainWindow):
         col.addWidget(suit_box)
 
         # output group
-        out_box = QGroupBox("4. Print Sheet")
+        out_box = QGroupBox("5. Print Sheet")
         out_lay = QVBoxLayout(out_box)
         self.paper_combo = QComboBox()
         for name in sheet_mod.PAPERS:
@@ -176,6 +190,14 @@ class MainWindow(QMainWindow):
         box.setLayout(col)
         wrapper.addWidget(box)
         return wrapper
+
+    def _toggle(self, layout, label, tip):
+        b = QPushButton(label)
+        b.setCheckable(True)
+        b.setToolTip(tip)
+        b.toggled.connect(self.recompose)
+        layout.addWidget(b)
+        return b
 
     def _slider(self, layout, label, lo, hi, val):
         layout.addWidget(QLabel(label))
@@ -231,13 +253,14 @@ class MainWindow(QMainWindow):
             return
         try:
             img = imageio.load_image(path)
-        except Exception as e:  # noqa: BLE001
-            QMessageBox.warning(self, "Could not open", str(e))
-            return
-        self.file_label.setText(Path(path).name)
-        self.cutout = None
-        self._auto_crop(img)
-        self.recompose()
+            self.file_label.setText(Path(path).name)
+            self.cutout = None
+            self._pipeline_gen = getattr(self, "_pipeline_gen", 0) + 1
+            self._auto_crop(img)
+            self.recompose()
+        except Exception as e:  # noqa: BLE001 - a silent slot exception would
+            # leave the preview empty with no hint of what went wrong.
+            QMessageBox.warning(self, "Could not open photo", str(e))
 
     def _auto_crop(self, img: Image.Image):
         detected = face_mod.detect_face(img)
@@ -278,6 +301,7 @@ class MainWindow(QMainWindow):
 
     def on_bg_removed(self, cutout):
         self.cutout = cutout
+        self._pipeline_gen = getattr(self, "_pipeline_gen", 0) + 1
         self.remove_bg_btn.setEnabled(True)
         self.statusBar().showMessage("Background removed.")
         self.recompose()
@@ -312,15 +336,28 @@ class MainWindow(QMainWindow):
         self.on_tab_changed(self.tabs.currentIndex() if hasattr(self, "tabs") else 0)
 
     # ---------------- composition ----------------
+    def _enhanced(self, src: Image.Image, source_tag: str) -> Image.Image:
+        flags = (self.btn_fix_light.isChecked(), self.btn_smooth_skin.isChecked(),
+                 self.btn_brighten.isChecked())
+        if not any(flags):
+            return src
+        # keyed by pipeline generation, not object identity: ids get reused
+        key = (getattr(self, "_pipeline_gen", 0), source_tag, flags)
+        if getattr(self, "_enh_cache_key", None) != key:
+            self._enh_cache_key = key
+            self._enh_cache_img = enhance_mod.apply_enhancements(
+                src, self.face, *flags)
+        return self._enh_cache_img
+
     def recompose(self):
         if not self.cropped:
             return
         if self.cutout is not None and self.bg_color is not None:
-            base = background.composite_on_color(self.cutout, self.bg_color)
-        elif self.cutout is not None and self.bg_color is None:
-            base = self.cropped.convert("RGBA")
+            # enhance the cutout, then composite, so the backdrop stays uniform
+            base = background.composite_on_color(
+                self._enhanced(self.cutout, "cutout"), self.bg_color)
         else:
-            base = self.cropped.convert("RGBA")
+            base = self._enhanced(self.cropped.convert("RGBA"), "cropped")
 
         idx = self.suit_combo.currentIndex()
         if idx > 0 and self.face:

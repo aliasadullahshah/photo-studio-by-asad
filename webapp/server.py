@@ -19,7 +19,9 @@ from pydantic import BaseModel
 
 from photoclaude import APP_NAME, __version__
 # Importing imageio also registers the HEIC/HEIF opener when available.
-from photoclaude.core import background, face as face_mod, imageio, sheet as sheet_mod, suit as suit_mod
+from photoclaude.core import (
+    background, enhance as enhance_mod, face as face_mod, imageio,
+    sheet as sheet_mod, suit as suit_mod)
 
 STATIC_DIR = Path(__file__).resolve().parent / "static"
 STATIC_DIR.mkdir(parents=True, exist_ok=True)  # frontend files land here
@@ -97,6 +99,34 @@ def process_photo(file: UploadFile = File(...)) -> dict:
         "face": {"x": face.x, "y": face.y, "w": face.w, "h": face.h,
                  "cx": face.cx, "chin_y": face.chin_y},
     }
+
+
+class EnhanceRequest(BaseModel):
+    cutout: str          # base64 PNG (RGBA) — always the ORIGINAL cutout
+    face: dict           # {x, y, w, h} as returned by /api/process
+    fix_light: bool = False
+    smooth_skin: bool = False
+    brighten_face: bool = False
+
+
+@app.post("/api/enhance")
+def enhance_photo(req: EnhanceRequest) -> dict:
+    """Apply one-click enhancements to a cutout; alpha channel is preserved.
+
+    Plain def: bilateral filtering is CPU work, keep it off the event loop.
+    """
+    try:
+        img = Image.open(io.BytesIO(base64.b64decode(req.cutout))).convert("RGBA")
+        face = face_mod.FaceBox(int(req.face["x"]), int(req.face["y"]),
+                                int(req.face["w"]), int(req.face["h"]))
+    except Exception as e:  # noqa: BLE001 - surfaced to the user
+        raise HTTPException(400, f"Bad enhance request: {e}") from e
+
+    out = enhance_mod.apply_enhancements(
+        img, face, req.fix_light, req.smooth_skin, req.brighten_face)
+    buf = io.BytesIO()
+    out.save(buf, "PNG")
+    return {"cutout": base64.b64encode(buf.getvalue()).decode("ascii")}
 
 
 @app.get("/api/suits")

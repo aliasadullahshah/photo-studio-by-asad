@@ -41,9 +41,16 @@ class FaceBox:
 def _get_cascade():
     global _cascade
     if _cascade is None:
-        _cascade = cv2.CascadeClassifier(
-            cv2.data.haarcascades + "haarcascade_frontalface_default.xml"
-        )
+        path = cv2.data.haarcascades + "haarcascade_frontalface_default.xml"
+        cascade = cv2.CascadeClassifier(path)
+        # CascadeClassifier does not raise on a missing file — it silently
+        # yields an empty classifier that crashes detectMultiScale later.
+        if cascade.empty():
+            raise RuntimeError(
+                f"Face detection model not found at {path}. "
+                "The application installation appears to be incomplete — "
+                "please reinstall.")
+        _cascade = cascade
     return _cascade
 
 

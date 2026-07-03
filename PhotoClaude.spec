@@ -1,12 +1,29 @@
 # PyInstaller spec — build with:  pyinstaller PhotoClaude.spec
 import os
-from PyInstaller.utils.hooks import collect_data_files, collect_submodules
+from PyInstaller.utils.hooks import (
+    collect_data_files, collect_submodules, copy_metadata)
 
 block_cipher = None
 
 datas = [("assets/suits", "assets/suits")]
 datas += collect_data_files("rembg")
 datas += collect_data_files("onnxruntime")
+
+# pymatting (pulled in by rembg) reads its own version via importlib.metadata
+# at import time — without the dist-info the frozen app dies on first
+# background removal. Same insurance for its numba/llvmlite chain and rembg.
+for pkg in ("pymatting", "rembg", "numba", "llvmlite"):
+    datas += copy_metadata(pkg)
+
+# The PyInstaller cv2 hook does not collect the Haar cascade XMLs from
+# opencv-python-headless — without this the installed app cannot detect
+# faces and photo-open fails on every machine.
+import cv2  # noqa: E402
+datas.append((
+    cv2.data.haarcascades + "haarcascade_frontalface_default.xml", "cv2/data"))
+
+# Sample portrait for the frozen self-test (PHOTOSTUDIO_SELFTEST=1).
+datas.append(("webapp/static/sample.jpg", "assets"))
 
 # Ship the segmentation model inside the installer so the app is fully
 # offline after install. Run tools/predownload_model.py before building.

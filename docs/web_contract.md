@@ -58,6 +58,16 @@ fallback logic of their own.
 ```
 400 JSON {"detail": "..."} on unreadable file.
 
+### POST /api/enhance — JSON body
+One-click enhancements applied server-side to the ORIGINAL cutout (client
+must not stack calls on already-enhanced output). Alpha is preserved.
+```
+{ "cutout": "<base64 PNG RGBA>", "face": {"x","y","w","h"},
+  "fix_light": bool, "smooth_skin": bool, "brighten_face": bool }
+```
+200: `{ "cutout": "<base64 PNG RGBA>" }` — 400 on undecodable input.
+Backed by photoclaude.core.enhance.apply_enhancements().
+
 ### GET /api/suits
 ```
 [ {"name": "Navy Suit Red Tie", "file": "navy_suit_red_tie.png",

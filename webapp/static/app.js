@@ -67,7 +67,9 @@
   // State
   // ------------------------------------------------------------------
   const state = {
-    cutoutImg: null,          // HTMLImageElement of the RGBA cutout
+    cutoutImg: null,          // HTMLImageElement of the RGBA cutout (shown)
+    origCutoutImg: null,      // HTMLImageElement of the unenhanced cutout
+    cutoutB64: null,          // base64 of the ORIGINAL cutout (for /api/enhance)
     cutoutW: 0,
     cutoutH: 0,
     face: null,               // {x, y, w, h, cx, chin_y} in cutout pixel coords
@@ -77,9 +79,12 @@
     dx: 0,                    // -20..20
     dy: 0,                    // -20..20
     papers: {},               // {"4x6\"": {copies:[...]}, ...}
+    enhance: { fix_light: false, smooth_skin: false, brighten_face: false },
   };
 
   const suitImageCache = new Map();   // url -> HTMLImageElement
+  const enhanceCache = new Map();     // "f,s,b" -> HTMLImageElement
+  let enhanceSeq = 0;                 // guards against out-of-order responses
   let drawQueued = false;
   let statusTimer = null;
 
@@ -277,6 +282,8 @@
       const img = new Image();
       img.onload = () => {
         state.cutoutImg = img;
+        state.origCutoutImg = img;
+        state.cutoutB64 = data.cutout;
         state.cutoutW = data.width;
         state.cutoutH = data.height;
         state.face = data.face ? data.face : fallbackFace(data.width, data.height);
@@ -295,6 +302,10 @@
     state.scale = 100;
     state.dx = 0;
     state.dy = 0;
+    state.enhance = { fix_light: false, smooth_skin: false, brighten_face: false };
+    enhanceCache.clear();
+    enhanceSeq++;
+    updateEnhanceButtons();
     syncSliders();
     updateSwatchSelection();
     updateSuitSelection();
@@ -385,6 +396,76 @@
       el.classList.toggle("is-selected", el.dataset.color.toLowerCase() === String(current).toLowerCase());
     });
     btnTransparent.classList.toggle("is-selected", current === "transparent");
+  }
+
+  // ------------------------------------------------------------------
+  // Enhance panel
+  // ------------------------------------------------------------------
+  function initEnhance() {
+    document.querySelectorAll(".enh-btn").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const flag = btn.dataset.flag;
+        state.enhance[flag] = !state.enhance[flag];
+        updateEnhanceButtons();
+        applyEnhancements();
+      });
+    });
+  }
+
+  function updateEnhanceButtons() {
+    document.querySelectorAll(".enh-btn").forEach((btn) => {
+      btn.classList.toggle("is-selected", !!state.enhance[btn.dataset.flag]);
+    });
+  }
+
+  async function applyEnhancements() {
+    const e = state.enhance;
+    const seq = ++enhanceSeq;
+    const key = [e.fix_light, e.smooth_skin, e.brighten_face].join(",");
+
+    if (!e.fix_light && !e.smooth_skin && !e.brighten_face) {
+      state.cutoutImg = state.origCutoutImg;
+      scheduleDraw();
+      return;
+    }
+    if (enhanceCache.has(key)) {
+      state.cutoutImg = enhanceCache.get(key);
+      scheduleDraw();
+      return;
+    }
+
+    setBarStatus("Enhancing photo…");
+    try {
+      const res = await fetch("/api/enhance", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          cutout: state.cutoutB64,
+          face: { x: state.face.x, y: state.face.y, w: state.face.w, h: state.face.h },
+          fix_light: e.fix_light,
+          smooth_skin: e.smooth_skin,
+          brighten_face: e.brighten_face,
+        }),
+      });
+      if (!res.ok) throw new Error(await errorDetail(res, "Enhancement failed."));
+      const data = await res.json();
+      const img = new Image();
+      await new Promise((resolve, reject) => {
+        img.onload = resolve;
+        img.onerror = () => reject(new Error("Enhanced image could not be displayed."));
+        img.src = "data:image/png;base64," + data.cutout;
+      });
+      enhanceCache.set(key, img);
+      if (seq === enhanceSeq) {       // a newer toggle click wins
+        state.cutoutImg = img;
+        setBarStatus("");
+        scheduleDraw();
+      }
+    } catch (err) {
+      if (seq === enhanceSeq) {
+        setBarStatus(err && err.message ? err.message : "Enhancement failed.", true);
+      }
+    }
   }
 
   // ------------------------------------------------------------------
@@ -687,6 +768,10 @@
 
   function startOver() {
     state.cutoutImg = null;
+    state.origCutoutImg = null;
+    state.cutoutB64 = null;
+    enhanceCache.clear();
+    enhanceSeq++;
     state.face = null;
     resetEditorControls();
     clearLandingError();
@@ -699,6 +784,7 @@
   function init() {
     initLanding();
     initBackgroundPanel();
+    initEnhance();
     initAdjustments();
 
     btnPhoto.addEventListener("click", downloadPhoto);
